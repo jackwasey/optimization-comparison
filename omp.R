@@ -67,7 +67,7 @@ cppFunction(macroExpand_omp(m_rows),  plugins = "openmp", rebuild = rebuild)
 
 # using != as inner loop control - no difference, using pre-increment in n_all_true, no diff, static vs dynamic OpenMP, attempted to direct clang and gcc to unroll loops: didn't seem to work
 
-sourceCpp("/home/jack/so32810274/omp.cpp", rebuild = rebuild, showOutput = TRUE, verbose = FALSE)
+sourceCpp("~/Documents/RProjects/optimization-comparison/omp.cpp", rebuild = rebuild, showOutput = TRUE, verbose = FALSE)
 
 set.seed(21)
 m <- matrix(sample(c(TRUE, FALSE), m_cols * m_rows, replace = T), ncol = m_rows)
