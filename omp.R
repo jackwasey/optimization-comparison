@@ -99,35 +99,34 @@ macroExpand_omp <- function(NCOL) {
   }')
 }
 
-cppFunction(macroExpand(m_rows), rebuild = rebuild)
-cppFunction(macroExpand_omp(m_rows),  plugins = "openmp", rebuild = rebuild)
-
 # using != as inner loop control - no difference, using pre-increment in n_all_true, no diff, static vs dynamic OpenMP, attempted to direct clang and gcc to unroll loops: didn't seem to work
 
 sourceCpp("~/Documents/RProjects/optimization-comparison/omp.cpp", rebuild = rebuild, showOutput = TRUE, verbose = FALSE)
 
 set.seed(21)
-m <- matrix(sample(c(TRUE, FALSE), m_cols * m_rows, replace = T), ncol = m_rows)
+m <- matrix(sample(c(TRUE, FALSE), m_cols * m_rows, replace = TRUE), ncol = m_rows)
 
-do_bench <- function(m, msg="", times = 1000) {
+do_bench <- function(m, msg="", times = 25000) {
   message(msg)
   microbenchmark(
     #    t(m), # just transposing the data takes far longer than the best methods.
     #    hm(m),
     #    hm3(m),
-    hm_transpose(m),
-    hm_jmu(m),
+    # hm_transpose(m),
+    #hm_jmu(m),
     hm_npjc(m),
+    hm_npjc_omp(m),
     hm_omp(m),
     hm_check_omp(m),
     #    hm_check_omp_no_sched(m),
-    hm_npjc_omp(m),
     hm_check(m),
     hm_check_unroll(m),
-    #    hm_check_unroll_10(m),
+    hm_check_unroll_10(m),
     hm_check_vectorize(m),
     # v slow hm_apply(m),
     times = times)
+
+  message("in summary, -O3 makes the difference regardless of -march=native and any fancy loop unrolling things. Manually setting loop size to an integer rather than a variable was the biggest code difference. Perhaps pragmas for clang and gcc could improve on this...")
 }
 
 
@@ -141,7 +140,7 @@ flags = c("",
           "-O3 -funroll-loops",
           "-O3 -funroll-all-loops",
           "-O3 -fno-align-loops",
-          "-Wunsafe-loop-optimizations -funsafe-loop-optimizations")
+          "-O3 -march=native -funroll-all-loops -Wunsafe-loop-optimizations -funsafe-loop-optimizations")
 # gcc only: flags = c("-O3 -fopt-info")
 
 for (flag in flags) {
@@ -149,6 +148,11 @@ for (flag in flags) {
   thisflag = list("CXXFLAGS" = flag)
   set_makevars(thisflag, "~/.R/Makevars", "~/.R/Makevars")
   sourceCpp("omp.cpp", rebuild = rebuild, showOutput = TRUE, verbose = FALSE)
+
+  # do the hard coded loop size variants:
+  cppFunction(macroExpand(m_rows), rebuild = rebuild)
+  cppFunction(macroExpand_omp(m_rows),  plugins = "openmp", rebuild = rebuild)
+
   all_benches[[flag]] = do_bench(m)
 }
 
