@@ -1,6 +1,43 @@
 library(Rcpp)
 library(microbenchmark)
 
+# from Jim Hester's excellent covr package
+is.named <- function(x) {
+  !is.null(names(x)) && all(names(x) != "")
+}
+set_makevars <- function(variables,
+                         old_path = file.path("~", ".R", "Makevars"),
+                         new_path = tempfile()) {
+  if (length(variables) == 0) {
+    return()
+  }
+  stopifnot(is.named(variables))
+
+  old <- NULL
+  if (file.exists(old_path)) {
+    lines <- readLines(old_path)
+    old <- lines
+    for (var in names(variables)) {
+      loc <- grep(paste(c("^[[:space:]]*", var, "[[:space:]]*", "="), collapse = ""), lines)
+      if (length(loc) == 0) {
+        lines <- append(lines, paste(sep = "=", var, variables[var]))
+      } else if (length(loc) == 1) {
+        lines[loc] <- paste(sep = "=", var, variables[var])
+      } else {
+        stop("Multiple results for ", var, " found, something is wrong.", .call = FALSE)
+      }
+    }
+  } else {
+    lines <- paste(names(variables), variables, sep = "=")
+  }
+
+  if (!identical(old, lines)) {
+    writeLines(con = new_path, lines)
+  }
+
+  old
+}
+
 m_rows <- 10L
 m_cols <- 50000L
 rebuild = TRUE
@@ -75,19 +112,19 @@ m <- matrix(sample(c(TRUE, FALSE), m_cols * m_rows, replace = T), ncol = m_rows)
 do_bench <- function(m, msg="", times = 1000) {
   message(msg)
   microbenchmark(
-#    t(m), # just transposing the data takes far longer than the best methods.
-#    hm(m),
-#    hm3(m),
+    #    t(m), # just transposing the data takes far longer than the best methods.
+    #    hm(m),
+    #    hm3(m),
     hm_transpose(m),
     hm_jmu(m),
     hm_npjc(m),
     hm_omp(m),
     hm_check_omp(m),
-#    hm_check_omp_no_sched(m),
+    #    hm_check_omp_no_sched(m),
     hm_npjc_omp(m),
     hm_check(m),
     hm_check_unroll(m),
-#    hm_check_unroll_10(m),
+    #    hm_check_unroll_10(m),
     hm_check_vectorize(m),
     # v slow hm_apply(m),
     times = times)
@@ -95,23 +132,23 @@ do_bench <- function(m, msg="", times = 1000) {
 
 
 all_benches <- list()
-
 if (!rebuild) stop("rebuild is off")
-vanilla <- Sys.getenv("PKG_CFLAGS")
-on.exit(Sys.setenv("PKG_CXXFLAGS" = vanilla))
-
-flags = c(vanilla,
+flags = c("",
+          "-Os",
+          "-O2",
           "-O3",
+          "-O3 -march=native",
           "-O3 -funroll-loops",
           "-O3 -funroll-all-loops",
           "-O3 -fno-align-loops",
-          "-O4",
           "-Wunsafe-loop-optimizations -funsafe-loop-optimizations")
-# gcc_flags = c("-O3 -fopt-info")
+# gcc only: flags = c("-O3 -fopt-info")
 
 for (flag in flags) {
-  Sys.setenv("PKG_CXXFLAGS" = flag)
-  sourceCpp("/home/jack/so32810274/omp.cpp", rebuild = rebuild, showOutput = TRUE, verbose = FALSE)
+  message(flag)
+  thisflag = list("CXXFLAGS" = flag)
+  set_makevars(thisflag, "~/.R/Makevars", "~/.R/Makevars")
+  sourceCpp("omp.cpp", rebuild = rebuild, showOutput = TRUE, verbose = FALSE)
   all_benches[[flag]] = do_bench(m)
 }
 
